@@ -1,10 +1,11 @@
+#!/usr/bin/env python3
+
 import pickle
 import pandas as pd
 from impute_preprocess import impute, preprocess
 import gzip
 import time
 import os
-from pathlib import Path
 import argparse
 from datetime import datetime
 import psutil
@@ -67,7 +68,7 @@ class CalculateCapiceScores:
             min_pos = subset_variants_df['Pos'].min()
             max_pos = subset_variants_df['Pos'].max()
             chunk = f'{unique_chr}:{min_pos}-{max_pos}'
-            output_filename = f'whole_genome_SNVs_{chunk}'
+            output_filename = f'whole_genome_SNVs_{chunk}.txt'
             final_destination = os.path.join(output_dir, output_filename)
             self.utilities.check_if_file_exists(final_destination)
             with open(final_destination, 'a') as f:
@@ -84,6 +85,7 @@ class CalculateCapiceScores:
         start = 0
         first_iter = True
         start_time = time.time()
+        iteration = 0
         while self.not_done:
             reset_timer = time.time()
             if reset_timer - start_time > (60 * 5) or first_iter:
@@ -98,13 +100,14 @@ class CalculateCapiceScores:
                 self.log.log(f'Currently working on rows {start} -'
                              f' {start + self.batch_size}.')
                 reset_timer = time.time()
+                if first_iter:
+                    start += 1
+                    first_iter = False
             self.calculate_save_capice_score(self.batch_size, start)
-            if first_iter:
-                start += self.batch_size + 1
-                first_iter = False
+            start += self.batch_size
+            iteration += 1
+            if iteration > 2:
                 exit()
-            else:
-                start += self.batch_size
 
 
 class ArgumentSupporter:
@@ -178,18 +181,16 @@ class Logger:
     """
     Class to make a logfile on the progress being made.
     """
-    def __init__(self):
-        self.root_dir = Path(__file__).parent
-        self.output_dir = None
+    def __init__(self, output_dir):
+        self.output_dir = output_dir
         self.logfile = None
         self.utilities = Utilities()
         self.check_if_dir_exist()
         self.check_if_log_file_exist()
 
     def check_if_dir_exist(self):
-        output_dir = os.path.join(self.root_dir, 'log_output')
+        output_dir = os.path.join(self.output_dir, 'log_output')
         self.utilities.check_if_dir_exists(output_dir)
-        self.output_dir = output_dir
 
     def check_if_log_file_exist(self):
         log_file_name = f'{datetime.now().strftime("%Y_%m_%d_%H%M%S_%f")}' \
@@ -231,7 +232,6 @@ def main():
     Main method of the script. Will call the various classes.
     """
     arguments = ArgumentSupporter()
-    logger = Logger()
     cadd_loc = arguments.get_argument('file')
     model_loc = arguments.get_argument('model')
     output_loc = arguments.get_argument('output')
@@ -244,6 +244,7 @@ def main():
         output_loc = str(output_loc[0])
     if isinstance(batch_size, list):
         batch_size = int(batch_size[0])
+    logger = Logger(output_loc)
     logger.log(f'CADD file location: {cadd_loc}')
     logger.log(f'Model file location: {model_loc}')
     logger.log(f'Output directory: {output_loc}')
