@@ -39,7 +39,7 @@ class CalculateCapiceScores:
                     if line.decode('utf-8').startswith("#Chr"):
                         print(line.decode('utf-8'))
                         self.titles = line.decode('utf-8').strip().split("\t")
-                        self.log.log(f'Title found: {self.titles}')
+                        self.log.log('Title found: {}'.format(self.titles))
                         break
                     else:
                         continue
@@ -50,9 +50,9 @@ class CalculateCapiceScores:
                                   comment='#', compression='gzip')
         if variants_df.shape[0] < batch_size:
             self.not_done = False
-            self.log.log(f'Processing the last entries!'
-                         f' Total variants processed: '
-                         f'{skip_rows + variants_df.shape[0]}.')
+            self.log.log('Processing the last entries! '
+                         'Total variants processed:'
+                         ' {}.'.format(skip_rows + variants_df.shape[0]))
 
         variants_df_preprocessed = preprocess(impute(variants_df),
                                               isTrain=False,
@@ -60,15 +60,17 @@ class CalculateCapiceScores:
         variants_df['prediction'] = self.model.predict_proba(
             variants_df_preprocessed[self.model_feats])[:, 1]
         if variants_df['prediction'].isnull().any():
-            self.log.log(f'NaN encounter in chunk: {skip_rows}-{batch_size}!')
+            self.log.log('NaN encounter in chunk: {}-{}!'.format(skip_rows,
+                                                                 batch_size))
         for unique_chr in variants_df['#Chr'].unique():
             subset_variants_df = variants_df[variants_df['#Chr'] == unique_chr]
-            output_dir = os.path.join(self.output_loc, f'chr{unique_chr}')
+            output_dir = os.path.join(self.output_loc, 'chr{}'.format(
+                unique_chr))
             self.utilities.check_if_dir_exists(output_dir)
             min_pos = subset_variants_df['Pos'].min()
             max_pos = subset_variants_df['Pos'].max()
-            chunk = f'{unique_chr}:{min_pos}-{max_pos}'
-            output_filename = f'whole_genome_SNVs_{chunk}.txt'
+            chunk = '{}:{}-{}'.format(unique_chr, min_pos, max_pos)
+            output_filename = 'whole_genome_SNVs_{}.txt'.format(chunk)
             final_destination = os.path.join(output_dir, output_filename)
             self.utilities.check_if_file_exists(final_destination)
             with open(final_destination, 'a') as f:
@@ -94,11 +96,14 @@ class CalculateCapiceScores:
                 time_difference = curr_time - start_time
                 minutes, seconds = divmod(time_difference, 60)
                 hours, minutes = divmod(minutes, 60)
-                self.log.log(f'Still going for {hours} hours,'
-                             f' {minutes} minutes and {seconds} seconds.')
-                self.log.log(f'Memory usage: {self.log.get_ram_usage} MB.')
-                self.log.log(f'Currently working on rows {start} -'
-                             f' {start + self.batch_size}.')
+                self.log.log('Still going for {} hours,'
+                             ' {} minutes and {} seconds.'.format(hours,
+                                                                  minutes,
+                                                                  seconds))
+                self.log.log('Memory usage: {} MB.'.format(
+                    self.log.get_ram_usage))
+                self.log.log('Currently working on rows {} -'
+                             ' {}.'.format(start, start + self.batch_size))
                 reset_timer = time.time()
                 if first_iter:
                     start += 1
@@ -191,10 +196,11 @@ class Logger:
     def check_if_dir_exist(self):
         output_dir = os.path.join(self.output_dir, 'log_output')
         self.utilities.check_if_dir_exists(output_dir)
+        self.output_dir = output_dir
 
     def check_if_log_file_exist(self):
-        log_file_name = f'{datetime.now().strftime("%Y_%m_%d_%H%M%S_%f")}' \
-                        f'_logfile.txt'
+        log_file_name = '{}_logfile.txt'.format(datetime.now().strftime(
+            "%Y_%m_%d_%H%M%S_%f"))
         joined_path = os.path.join(self.output_dir, log_file_name)
         self.utilities.check_if_file_exists(joined_path)
         self.logfile = joined_path
@@ -209,7 +215,7 @@ class Logger:
 
     def log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S_%f")
-        timed_message = f'[{timestamp}]: {message}'
+        timed_message = '[{}]: {}\n'.format(timestamp, message)
         with open(self.logfile, 'a') as logfile:
             logfile.write(timed_message)
 
@@ -245,10 +251,10 @@ def main():
     if isinstance(batch_size, list):
         batch_size = int(batch_size[0])
     logger = Logger(output_loc)
-    logger.log(f'CADD file location: {cadd_loc}')
-    logger.log(f'Model file location: {model_loc}')
-    logger.log(f'Output directory: {output_loc}')
-    logger.log(f'Batch size set to: {batch_size}')
+    logger.log('CADD file location: {}'.format(cadd_loc))
+    logger.log('Model file location: {}'.format(model_loc))
+    logger.log('Output directory: {}'.format(output_loc))
+    logger.log('Batch size set to: {}'.format(batch_size))
     precompute_capice = CalculateCapiceScores(logger_instance=logger,
                                               filepath=cadd_loc,
                                               model_loc=model_loc,
