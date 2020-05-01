@@ -23,10 +23,10 @@ class CalculateCapiceScores:
         self.titles = None
         self.get_header()
         self.model = None
-        self.load_model(model_loc)
         self.model_feats = None
+        self.load_model(model_loc)
         self.not_done = True
-        self.batch_size = batch_size
+        self.batch_size = batch_size - 1
         self.output_loc = output_loc
         self.utilities = Utilities()
         self.utilities.check_if_dir_exists(output_loc)
@@ -37,7 +37,6 @@ class CalculateCapiceScores:
                 while True:
                     line = f.readline()
                     if line.decode('utf-8').startswith("#Chr"):
-                        print(line.decode('utf-8'))
                         self.titles = line.decode('utf-8').strip().split("\t")
                         self.log.log('Title found: {}'.format(self.titles))
                         break
@@ -45,7 +44,7 @@ class CalculateCapiceScores:
                         continue
 
     def calculate_save_capice_score(self, batch_size, skip_rows):
-        variants_df = pd.read_csv(self.filepath, sep='\t', skip_rows=skip_rows,
+        variants_df = pd.read_csv(self.filepath, sep='\t', skiprows=skip_rows,
                                   nrows=batch_size, names=self.titles,
                                   comment='#', compression='gzip')
         if variants_df.shape[0] < batch_size:
@@ -55,29 +54,31 @@ class CalculateCapiceScores:
                          ' {}.'.format(skip_rows + variants_df.shape[0]))
 
         variants_df_preprocessed = preprocess(impute(variants_df),
-                                              isTrain=False,
                                               model_features=self.model_feats)
         variants_df['prediction'] = self.model.predict_proba(
             variants_df_preprocessed[self.model_feats])[:, 1]
         if variants_df['prediction'].isnull().any():
-            self.log.log('NaN encounter in chunk: {}-{}!'.format(skip_rows,
+            self.log.log('NaN encounter in chunk: {}+{}!'.format(skip_rows,
                                                                  batch_size))
+        if variants_df[variants_df.duplicated()].shape[0] > 0:
+            duplicate = variants_df[variants_df.duplicated()]
+            self.log.log('Duplicate encountered in CADD dataset!: \nIndex:{},'
+                         '\nEntry:{}'.format(duplicate.index, duplicate))
         for unique_chr in variants_df['#Chr'].unique():
             subset_variants_df = variants_df[variants_df['#Chr'] == unique_chr]
             output_dir = os.path.join(self.output_loc, 'chr{}'.format(
                 unique_chr))
             self.utilities.check_if_dir_exists(output_dir)
-            min_pos = subset_variants_df['Pos'].min()
-            max_pos = subset_variants_df['Pos'].max()
-            chunk = '{}:{}-{}'.format(unique_chr, min_pos, max_pos)
+            chunk = 'chr_{}'.format(unique_chr)
             output_filename = 'whole_genome_SNVs_{}.txt'.format(chunk)
             final_destination = os.path.join(output_dir, output_filename)
             self.utilities.check_if_file_exists(final_destination)
+            features_of_interest = ['#Chr', 'Pos', 'Ref', 'Alt',
+                                    'GeneID', 'CCDS', 'FeatureID', 'prediction']
             with open(final_destination, 'a') as f:
-                variants_df[['#Chr', 'Pos', 'Ref', 'Alt', 'GeneID',
-                             'CCDS', 'FeatureID',
-                             'prediction']].to_csv(f, sep="\t", index=False,
-                                                   header=None)
+                subset_variants_df[features_of_interest].to_csv(f, sep="\t",
+                                                                index=False,
+                                                                header=None)
 
     def load_model(self, model_loc):
         self.model = pickle.load(open(model_loc, "rb")).best_estimator_
@@ -87,32 +88,39 @@ class CalculateCapiceScores:
         start = 0
         first_iter = True
         start_time = time.time()
-        iteration = 0
+        reset_timer = time.time()
+        num_logs = 0
         while self.not_done:
-            reset_timer = time.time()
-            if reset_timer - start_time > (60 * 5) or first_iter:
+            time_iwl = time.time()
+            if time_iwl - reset_timer > (30 * 0.25) or first_iter:
                 # Seconds times the amount of minutes.
+                num_logs += 1
                 curr_time = time.time()
                 time_difference = curr_time - start_time
                 minutes, seconds = divmod(time_difference, 60)
                 hours, minutes = divmod(minutes, 60)
-                self.log.log('Still going for {} hours,'
-                             ' {} minutes and {} seconds.'.format(hours,
-                                                                  minutes,
-                                                                  seconds))
+                self.log.log(
+                    'Still going for {} hours,'
+                    ' {} minutes and {} seconds.'.format(
+                        int(round(hours)),
+                        int(round(minutes)),
+                        int(round(seconds))
+                    )
+                )
                 self.log.log('Memory usage: {} MB.'.format(
-                    self.log.get_ram_usage))
+                    self.log.get_ram_usage()))
                 self.log.log('Currently working on rows {} -'
                              ' {}.'.format(start, start + self.batch_size))
                 reset_timer = time.time()
-                if first_iter:
-                    start += 1
-                    first_iter = False
+                if num_logs > 5:
+                    exit()
+            if first_iter:
+                self.batch_size -= 1
             self.calculate_save_capice_score(self.batch_size, start)
-            start += self.batch_size
-            iteration += 1
-            if iteration > 2:
-                exit()
+            if first_iter:
+                self.batch_size += 1
+                first_iter = False
+            start += self.batch_size + 1
 
 
 class ArgumentSupporter:
@@ -211,7 +219,8 @@ class Logger:
     @staticmethod
     def get_ram_usage():
         process = psutil.Process(os.getpid())
-        return process.memory_info().rss / 1000000  # Megabytes
+        memory_usage = process.memory_info().rss / 1000000  # Megabytes
+        return memory_usage
 
     def log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S_%f")

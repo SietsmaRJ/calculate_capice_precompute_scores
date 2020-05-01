@@ -50,14 +50,15 @@ impute_values = {'Ref':'N', 'Alt':'N', 'Consequence':'UNKNOWN', 'GC':0.42, 'CpG'
                  'dbscSNV-rf_score':0}
 
 
-def examine_nas(df):
+def examine_nas(df, print_messages):
     sample_num = df.shape[0]
     null_ratios = {}
     for col in df.columns:
         null_number = df[col].isnull().sum()
         if null_number > 0:
             null_ratios[col] = null_number/sample_num
-            print(col, null_number, round(null_number/sample_num, 2))
+            if print_messages:
+                print(col, null_number, round(null_number/sample_num, 2))
     return null_ratios
 
 
@@ -76,26 +77,31 @@ def replace_nas(df, Dict):
     return df
 
 
-def impute(df, imputed_savepath=None):
-    print(type(df))
-    print("Readin data shape: ", df.shape)
-    print(df.head())
+def impute(df, imputed_savepath=None, print_messages=False):
+    if print_messages:
+        print(type(df))
+        print("Readin data shape: ", df.shape)
+        print(df.head())
     df = df.dropna(subset=cadd_vars, how="all")
-    print("Remove samples with no parameters, shape: ", df.shape)
+    if print_messages:
+        print("Remove samples with no parameters, shape: ", df.shape)
     func = lambda x: np.nan if pd.isnull(x) or x == "." or x == 'NA' else float(x)
     values = df["dbscSNV-rf_score"].values
     df["dbscSNV-rf_score"] = [func(item) for item in values]
     df = df.dropna(how="all")
-    print("Raw data loaded, shape: ", df.shape)
-    print("Before imputation, null ratio: \n")
-    _ = examine_nas(df[cadd_vars])
+    if print_messages:
+        print("Raw data loaded, shape: ", df.shape)
+        print("Before imputation, null ratio: \n")
+    _ = examine_nas(df[cadd_vars], print_messages)
     # save null ratios
     df = replace_nas(df, impute_values)
-    print("After imputation, there shouldn't be any nulls, but check below: \n")
-    _ = examine_nas(df)
+    if print_messages:
+        print("After imputation, there shouldn't be any nulls, but check below: \n")
+    _ = examine_nas(df, print_messages)
     if imputed_savepath:
         df.to_csv(imputed_savepath, index=False)
-        print("Saved imputed raw file to %s" % imputed_savepath)
+        if print_messages:
+            print("Saved imputed raw file to %s" % imputed_savepath)
     return df
 
 
@@ -109,44 +115,47 @@ def return_top10_or_less_categories(a_column, return_num=10):
         return value_counts.index.values
 
 
-def process_categoricalvars(data, feat_cadd_object, isTrain=False, catFeats_levels_dict=None, catFeatNames_dict=None):
+def process_categoricalvars(data, feat_cadd_object, print_messages, isTrain=False, catFeats_levels_dict=None, catFeatNames_dict=None):
     if isTrain:
-        print("Determining feature levels from the training dataset.")
+        if print_messages:
+            print("Determining feature levels from the training dataset.")
         for catFeat in catFeats_levels_dict.keys():
             featNames = return_top10_or_less_categories(data[catFeat],
                                                         return_num=catFeats_levels_dict[catFeat])
-            print("For feature %s, saved %d levels." % (catFeat, len(featNames)))
+            if print_messages:
+                print("For feature %s, saved %d levels." % (catFeat, len(featNames)))
             data[catFeat] = np.where(data[catFeat].isin(featNames), data[catFeat], "other")
     else:
-        print("Using features from the trained model.")
+        if print_messages:
+            print("Using features from the trained model.")
         for catFeat in catFeatNames_dict.keys():
             featNames = catFeatNames_dict[catFeat]
-            print("For feature %s, saved %d levels." % (catFeat, len(featNames)))
+            if print_messages:
+                print("For feature %s, saved %d levels." % (catFeat, len(featNames)))
             data[catFeat] = np.where(data[catFeat].isin(featNames), data[catFeat], "other")
     data = pd.get_dummies(data, columns=feat_cadd_object)
     return data
 
 
-def preprocess(imputed_data, processed_savepath=None, isTrain=False, model_path=None, model_features=None):
+def preprocess(imputed_data, processed_savepath=None, isTrain=False, model_path=None, model_features=None, print_messages=False):
     feat_cadd_object = [feat for feat in imputed_data.select_dtypes(include=["O"]).columns
                         if feat in cadd_vars]
-    print("Categorical variables", len(feat_cadd_object))
     num_samples = imputed_data.shape[0]
-    print("In total, there are %d samples" % num_samples)
+    if print_messages:
+        print("Categorical variables", len(feat_cadd_object))
+        print("In total, there are %d samples" % num_samples)
     catFeats_levels_dict = {"Ref": 5, "Alt": 5, "Domain": 5}
     if isTrain:
         for feat in feat_cadd_object:
             if feat not in catFeats_levels_dict:
                 catFeats_levels_dict[feat] = 5
-        processed_data = process_categoricalvars(imputed_data, feat_cadd_object=feat_cadd_object, isTrain=isTrain,
+        processed_data = process_categoricalvars(imputed_data, print_messages=print_messages, feat_cadd_object=feat_cadd_object, isTrain=isTrain,
                                                  catFeats_levels_dict=catFeats_levels_dict)
     else:
         if model_path:
             model_features = pickle.load(open(model_path, 'rb')).feature_names
-        elif model_features:
-            model_features=model_features
-        else:
-            print("In testing phase, features needs to be specified or pretrained models needs to be provided...")
+        elif not model_path and not model_features:
+            raise IOError("In testing phase, features needs to be specified or pretrained models needs to be provided...")
         catFeatNames_dict = {}
         for feature in feat_cadd_object:
             for feature_expandedname in model_features:
@@ -156,15 +165,18 @@ def preprocess(imputed_data, processed_savepath=None, isTrain=False, model_path=
                         catFeatNames_dict[feature].append(expandedname)
                     else:
                         catFeatNames_dict[feature] = [expandedname]
-        processed_data = process_categoricalvars(imputed_data, feat_cadd_object=feat_cadd_object, isTrain=isTrain,
+        processed_data = process_categoricalvars(imputed_data, print_messages=print_messages, feat_cadd_object=feat_cadd_object, isTrain=isTrain,
                                  catFeatNames_dict=catFeatNames_dict)
         for col in model_features:
             if col not in processed_data:
                 processed_data[col] = 0
-                print("Feature from the model not in data: ", col)
-    print(processed_data.shape)
+                if print_messages:
+                    print("Feature from the model not in data: ", col)
+    if print_messages:
+        print(processed_data.shape)
     if processed_savepath:
-        print("Saving preprocessed data to ", processed_savepath)
+        if print_messages:
+            print("Saving preprocessed data to ", processed_savepath)
         processed_data.to_csv(processed_savepath, index=False)
     return processed_data
 
