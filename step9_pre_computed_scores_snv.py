@@ -52,7 +52,7 @@ class CalculateCapiceScores:
             self.not_done = False
             self.log.log('Processing the last entries! '
                          'Total variants processed:'
-                         ' {}.'.format(skip_rows + variants_df.shape[0]))
+                         ' {}.'.format(skip_rows + variants_df.shape[0] - 1))
 
         variants_df_preprocessed = preprocess(impute(variants_df),
                                               model_features=self.model_feats)
@@ -109,7 +109,7 @@ class CalculateCapiceScores:
                 )
                 self.log.log('Memory usage: {} MB.'.format(
                     self.log.get_ram_usage()))
-                if not start:
+                if start:
                     self.log.log('Currently working on rows {} -'
                                  ' {}.'.format(start, start + self.batch_size))
                 reset_timer = time.time()
