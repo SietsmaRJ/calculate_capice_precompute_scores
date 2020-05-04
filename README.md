@@ -1,6 +1,8 @@
 # PreComputeCapice
 ###### When you want the full capice experience, but don't want to use the model
 
+### This is a program that works on the wonderfull [CAPICE](https://github.com/molgenis/capice) predictive model.
+
 ## Introduction
 
 'PreComputeCapice' is a program developed by R.J. Sietsma and maintained by the Genomic Coordination Centre Groningen.
