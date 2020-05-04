@@ -79,3 +79,5 @@ The program will output the following files:
 __Note: The program continually adds entries to this file, do NOT remove or replace this file till the program is done!__
 - Log_output: a file with timed messages on updates within the program. (Does not contain error messages or warnings).
 
+## TODO:
+- Add function to check if existing files are present and continue from where was left of (in case of crash).
