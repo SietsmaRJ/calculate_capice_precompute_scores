@@ -2,7 +2,7 @@
 
 import pickle
 import pandas as pd
-from impute_preprocess import impute, preprocess
+from utilities.impute_preprocess import impute, preprocess
 import gzip
 import time
 import os
@@ -124,7 +124,7 @@ class CalculateCapiceScores:
 class ArgumentSupporter:
     """
     Class to handle the given command line input.
-    Type python3 step9_pre_computed_scores_snv.py --help for more details.
+    Type python3 PreComputeCapice.py --help for more details.
     """
 
     def __init__(self):
@@ -134,7 +134,7 @@ class ArgumentSupporter:
     @staticmethod
     def _create_argument_parser():
         parser = argparse.ArgumentParser(
-            prog="step9_pre_computed_scores_snv.py",
+            prog="PreComputeCapice.py",
             description="Python script to calculate Pre-computed"
                         " scores for CAPICE for every given CADD variant.")
         required = parser.add_argument_group("Required arguments")
