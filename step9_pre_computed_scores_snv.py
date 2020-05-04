@@ -26,7 +26,7 @@ class CalculateCapiceScores:
         self.model_feats = None
         self.load_model(model_loc)
         self.not_done = True
-        self.batch_size = batch_size - 1
+        self.batch_size = batch_size
         self.output_loc = output_loc
         self.utilities = Utilities()
         self.utilities.check_if_dir_exists(output_loc)
@@ -43,11 +43,12 @@ class CalculateCapiceScores:
                     else:
                         continue
 
-    def calculate_save_capice_score(self, batch_size, skip_rows):
+    def calculate_save_capice_score(self, skip_rows):
         variants_df = pd.read_csv(self.filepath, sep='\t', skiprows=skip_rows,
-                                  nrows=batch_size, names=self.titles,
-                                  comment='#', compression='gzip')
-        if variants_df.shape[0] < batch_size:
+                                  nrows=self.batch_size, names=self.titles,
+                                  comment='#', compression='gzip',
+                                  low_memory=False)
+        if variants_df.shape[0] < self.batch_size:
             self.not_done = False
             self.log.log('Processing the last entries! '
                          'Total variants processed:'
@@ -58,8 +59,9 @@ class CalculateCapiceScores:
         variants_df['prediction'] = self.model.predict_proba(
             variants_df_preprocessed[self.model_feats])[:, 1]
         if variants_df['prediction'].isnull().any():
-            self.log.log('NaN encounter in chunk: {}+{}!'.format(skip_rows,
-                                                                 batch_size))
+            self.log.log('NaN encounter in chunk: {}+'
+                         '{}!'.format(skip_rows,
+                                      self.batch_size))
         if variants_df[variants_df.duplicated()].shape[0] > 0:
             duplicate = variants_df[variants_df.duplicated()]
             self.log.log('Duplicate encountered in CADD dataset!: \nIndex:{},'
@@ -85,16 +87,14 @@ class CalculateCapiceScores:
         self.model_feats = self.model.get_booster().feature_names
 
     def calc_capice(self):
-        start = 0
+        start = None
         first_iter = True
         start_time = time.time()
         reset_timer = time.time()
-        num_logs = 0
         while self.not_done:
             time_iwl = time.time()
-            if time_iwl - reset_timer > (30 * 0.25) or first_iter:
+            if time_iwl - reset_timer > (60 * 60) or first_iter:
                 # Seconds times the amount of minutes.
-                num_logs += 1
                 curr_time = time.time()
                 time_difference = curr_time - start_time
                 minutes, seconds = divmod(time_difference, 60)
@@ -109,18 +109,16 @@ class CalculateCapiceScores:
                 )
                 self.log.log('Memory usage: {} MB.'.format(
                     self.log.get_ram_usage()))
-                self.log.log('Currently working on rows {} -'
-                             ' {}.'.format(start, start + self.batch_size))
+                if not start:
+                    self.log.log('Currently working on rows {} -'
+                                 ' {}.'.format(start, start + self.batch_size))
                 reset_timer = time.time()
-                if num_logs > 5:
-                    exit()
+
+            self.calculate_save_capice_score(start)
             if first_iter:
-                self.batch_size -= 1
-            self.calculate_save_capice_score(self.batch_size, start)
-            if first_iter:
-                self.batch_size += 1
+                start = 2
                 first_iter = False
-            start += self.batch_size + 1
+            start += self.batch_size
 
 
 class ArgumentSupporter:
@@ -170,10 +168,11 @@ class ArgumentSupporter:
                               '--batchsize',
                               nargs=1,
                               type=int,
-                              default=1000,
+                              default=10000,
                               required=False,
                               help='The chunksize for the script to'
-                                   ' read the gzipped archive. (Default: 1000)')
+                                   ' read the gzipped archive.'
+                                   ' (Default: 10000)')
         return parser
 
     def get_argument(self, argument_key):
