@@ -9,6 +9,7 @@ import os
 import argparse
 from datetime import datetime
 import psutil
+import json
 
 
 class CalculateCapiceScores:
@@ -72,12 +73,13 @@ class CalculateCapiceScores:
                 unique_chr))
             self.utilities.check_if_dir_exists(output_dir)
             chunk = 'chr_{}'.format(unique_chr)
-            output_filename = 'whole_genome_SNVs_{}.txt'.format(chunk)
+            output_filename = 'whole_genome_SNVs_{}.tsv.gz'.format(chunk)
             final_destination = os.path.join(output_dir, output_filename)
-            self.utilities.check_if_file_exists(final_destination)
+            self.utilities.check_if_file_exists(final_destination,
+                                                capice_ouput=True)
             features_of_interest = ['#Chr', 'Pos', 'Ref', 'Alt',
                                     'GeneID', 'CCDS', 'FeatureID', 'prediction']
-            with open(final_destination, 'a') as f:
+            with gzip.open(final_destination, 'at') as f:
                 subset_variants_df[features_of_interest].to_csv(f, sep="\t",
                                                                 index=False,
                                                                 header=None)
@@ -108,7 +110,7 @@ class CalculateCapiceScores:
                     )
                 )
                 self.log.log('Memory usage: {} MB.'.format(
-                    self.log.get_ram_usage()))
+                    self.utilities.get_ram_usage()))
                 if start:
                     self.log.log('Currently working on rows {} -'
                                  ' {}.'.format(start, start + self.batch_size))
@@ -119,6 +121,39 @@ class CalculateCapiceScores:
                 start = 2
                 first_iter = False
             start += self.batch_size
+
+
+class OutputReInitializer:
+    """
+    Class to check for existing files in terms of progress.
+    """
+    def __init__(self, output_loc, logger_instance):
+        self.output = output_loc
+        self.log = logger_instance
+        self.utilities = Utilities()
+        self._check_for_progress_json()
+        self.json_not_found = True
+        if self.json_not_found:
+            self._check_for_processed_files()
+
+    def _check_for_progress_json(self):
+        progress_json = self.output + '/log_output/progression.json'
+        is_json = self.utilities.check_if_file_exists(progress_json,
+                                                      return_value=True)
+        if is_json:
+            with open(progress_json) as json_file:
+                json_data = json.load(json_file)
+            self.log.log('Progression json found! Continuing from {}'.format(
+                json_data['start']))
+            self.json_not_found = False
+        else:
+            self.log.log('No progression json found,'
+                         ' checking for processed files.')
+            with open(progress_json, 'w+') as json_file:
+                json.dump({}, json_file)
+
+    def _check_for_processed_files(self):
+        pass
 
 
 class ArgumentSupporter:
@@ -215,12 +250,6 @@ class Logger:
     def get_output_dir(self):
         return self.output_dir
 
-    @staticmethod
-    def get_ram_usage():
-        process = psutil.Process(os.getpid())
-        memory_usage = process.memory_info().rss / 1000000  # Megabytes
-        return memory_usage
-
     def log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S_%f")
         timed_message = '[{}]: {}\n'.format(timestamp, message)
@@ -230,15 +259,35 @@ class Logger:
 
 class Utilities:
     @staticmethod
+    def get_ram_usage():
+        process = psutil.Process(os.getpid())
+        memory_usage = process.memory_info().rss / 1000000  # Megabytes
+        return memory_usage
+
+    @staticmethod
     def check_if_dir_exists(path):
         if not os.path.exists(path):
             os.makedirs(path)
 
     @staticmethod
-    def check_if_file_exists(filepath):
+    def check_if_file_exists(filepath, capice_ouput=False, return_value=False):
+        if return_value:
+            make_output = False
+        else:
+            make_output = True
         if not os.path.isfile(filepath):
-            new_file = open(filepath, 'a+')
-            new_file.close()
+            if return_value:
+                return False
+            if capice_ouput:
+                if make_output:
+                    with gzip.open(filepath, 'a+') as file:
+                        file.close()
+            else:
+                if make_output:
+                    with open(filepath, 'a+') as file:
+                        file.close()
+        elif return_value:
+            return True
 
 
 def main():

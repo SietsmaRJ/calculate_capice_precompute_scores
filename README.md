@@ -75,9 +75,10 @@ python3 PreComputeCapice.py -f path/to/cadd/file.gz -m path/to/model.dat -o path
 ## Output
 
 The program will output the following files:
-- For each chromosome in the CADD file, it makes a folder named chrx (where x = chromosome) and places a txt tab separated file of all CADD entries for that chromosome.
+- For each chromosome in the CADD file, it makes a folder named chrx (where x = chromosome) and places a gzipped tsv of all CADD entries for that chromosome.
 __Note: The program continually adds entries to this file, do NOT remove or replace this file till the program is done!__
 - Log_output: a file with timed messages on updates within the program. (Does not contain error messages or warnings).
 
 ## TODO:
 - Add function to check if existing files are present and continue from where was left of (in case of crash).
+    - Plan: export json with start and stop (start + batch size) each iteration to the output folder.
