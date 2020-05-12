@@ -10,6 +10,7 @@ import argparse
 from datetime import datetime
 import psutil
 import json
+from pathlib import Path
 
 
 class CalculateCapiceScores:
@@ -31,6 +32,8 @@ class CalculateCapiceScores:
         self.output_loc = output_loc
         self.utilities = Utilities()
         self.utilities.check_if_dir_exists(output_loc)
+        self.reinstance = OutputReInitializer(self.output_loc, logger_instance)
+        self.previous_iteration_df = None
 
     def get_header(self):
         if not self.titles:
@@ -44,12 +47,12 @@ class CalculateCapiceScores:
                     else:
                         continue
 
-    def calculate_save_capice_score(self, skip_rows):
+    def calculate_save_capice_score(self, skip_rows, batch_size):
         variants_df = pd.read_csv(self.filepath, sep='\t', skiprows=skip_rows,
-                                  nrows=self.batch_size, names=self.titles,
+                                  nrows=batch_size, names=self.titles,
                                   comment='#', compression='gzip',
                                   low_memory=False)
-        if variants_df.shape[0] < self.batch_size:
+        if variants_df.shape[0] < batch_size:
             self.not_done = False
             self.log.log('Processing the last entries! '
                          'Total variants processed:'
@@ -62,12 +65,19 @@ class CalculateCapiceScores:
         if variants_df['prediction'].isnull().any():
             self.log.log('NaN encounter in chunk: {}+'
                          '{}!'.format(skip_rows,
-                                      self.batch_size))
+                                      batch_size))
         if variants_df[variants_df.duplicated()].shape[0] > 0:
             duplicate = variants_df[variants_df.duplicated()]
             self.log.log('Duplicate encountered in CADD dataset!: \nIndex:{},'
                          '\nEntry:{}'.format(duplicate.index, duplicate))
         for unique_chr in variants_df['#Chr'].unique():
+            # //TODO: add a merge with previous dataframe and merge left only (
+            # so subset_variants_df is the left one), by using how='left'
+            # and indicator = True. Then select only those
+            # with _merge == 'left_only' and boom no duplicates.
+
+            # //TODO: add function to get a dataframe of the gzipped archive
+            # of that chromosome, last start - x entries.
             subset_variants_df = variants_df[variants_df['#Chr'] == unique_chr]
             output_dir = os.path.join(self.output_loc, 'chr{}'.format(
                 unique_chr))
@@ -89,7 +99,12 @@ class CalculateCapiceScores:
         self.model_feats = self.model.get_booster().feature_names
 
     def calc_capice(self):
-        start = None
+        start, batch_size = self.reinstance.get_start_and_batchsize()
+        if not batch_size:
+            batch_size = self.batch_size
+        self._calc_capice(start, batch_size)
+
+    def _calc_capice(self, start, batch_size):
         first_iter = True
         start_time = time.time()
         reset_timer = time.time()
@@ -113,14 +128,14 @@ class CalculateCapiceScores:
                     self.utilities.get_ram_usage()))
                 if start:
                     self.log.log('Currently working on rows {} -'
-                                 ' {}.'.format(start, start + self.batch_size))
+                                 ' {}.'.format(start, start + batch_size))
                 reset_timer = time.time()
 
-            self.calculate_save_capice_score(start)
+            self.calculate_save_capice_score(start, batch_size)
             if first_iter:
                 start = 2
                 first_iter = False
-            start += self.batch_size
+            start += batch_size
 
 
 class OutputReInitializer:
@@ -131,13 +146,17 @@ class OutputReInitializer:
         self.output = output_loc
         self.log = logger_instance
         self.utilities = Utilities()
+        self.progress_json = None
+        self.start = None
+        self.batch_size = None
+        self.progress_json_loc = None
         self._check_for_progress_json()
-        self.json_not_found = True
-        if self.json_not_found:
-            self._check_for_processed_files()
+        self._check_for_processed_files()
 
     def _check_for_progress_json(self):
-        progress_json = self.output + '/log_output/progression.json'
+        progress_json = os.path.join(self.output, 'log_output',
+                                     'progression.json')
+        self.progress_json_loc = progress_json
         is_json = self.utilities.check_if_file_exists(progress_json,
                                                       return_value=True)
         if is_json:
@@ -145,15 +164,57 @@ class OutputReInitializer:
                 json_data = json.load(json_file)
             self.log.log('Progression json found! Continuing from {}'.format(
                 json_data['start']))
-            self.json_not_found = False
+            self.start = json_data['start']
+            self.batch_size = json_data['batch_size']
         else:
             self.log.log('No progression json found,'
                          ' checking for processed files.')
             with open(progress_json, 'w+') as json_file:
-                json.dump({}, json_file)
+                json.dump({'start': None, 'batch_size': None}, json_file)
+        with open(progress_json) as p_json:
+            self.progress_json = json.load(p_json)
+            p_json.close()
 
     def _check_for_processed_files(self):
-        pass
+        need_to_process = []
+        processed_file_nlines = self.progress_json
+        for path in Path(self.output).rglob('whole_genome_SNVs_*.tsv.gz'):
+            path = str(path)
+            if path not in processed_file_nlines.keys():
+                self.log.log('Found progress file!: {}'.format(path))
+                processed_file_nlines[path] = 0
+                need_to_process.append(path)
+        if len(need_to_process) > 0:
+            self.log.log('Attempting to track back'
+                         ' the amount of processed lines.')
+            for file in need_to_process:
+                if os.path.isfile(file):
+                    for line in gzip.open(file):
+                        processed_file_nlines[file] += 1
+            total_lines = 0
+            for nline in processed_file_nlines.values():
+                total_lines += nline
+            self.log.log('Amount of lines found: {}'.format(total_lines))
+            self.start = total_lines
+            start_batchsize_json = {'start': self.start, 'batch_size': None}
+            start_batchsize_json.update(processed_file_nlines)
+            with open(self.progress_json, 'w') as progress_json:
+                json.dump(start_batchsize_json,
+                          progress_json)
+            self.log.log('Start has been saved in: {}'.format(
+                self.progress_json))
+        with open(self.progress_json) as p_json:
+            self.progress_json = json.load(p_json)
+            p_json.close()
+
+    def get_start_and_batchsize(self):
+        return self.start, self.batch_size
+
+    def get_progression_loc(self):
+        return self.progress_json_loc
+
+    def get_progression_json_value(self, key):
+        return self.progress_json[key]
 
 
 class ArgumentSupporter:
@@ -288,6 +349,12 @@ class Utilities:
                         file.close()
         elif return_value:
             return True
+
+    @staticmethod
+    def export_start_batchsize(output_loc, start, batch_size):
+        output_json = {'start': start, 'batch_size': batch_size}
+        with open(output_loc, 'w') as json_file:
+            json.dump(output_json, json_file)
 
 
 def main():
