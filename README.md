@@ -82,3 +82,4 @@ __Note: The program continually adds entries to this file, do NOT remove or repl
 ## TODO:
 - Add function to check if existing files are present and continue from where was left of (in case of crash).
     - Plan: export json with start and stop (start + batch size) each iteration to the output folder.
+- Refactor output_reinitializer.py to singleton.
