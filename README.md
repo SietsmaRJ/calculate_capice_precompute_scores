@@ -26,7 +26,7 @@ __Warning: this program works for python version 3.6, it does not work for pytho
 ## Installing
 
 **Step 1: acquire the source files**
-Either [clone]() or [download]() the source files.
+Either [clone or download](https://github.com/SietsmaRJ/calculate_capice_precompute_scores/tree/master) the source files.
 
 **Step 2: activate the virtual environment**
 - Open a terminal in the cloned or downloaded folder.
@@ -78,6 +78,7 @@ The program will output the following files:
 - For each chromosome in the CADD file, it makes a folder named chrx (where x = chromosome) and places a gzipped tsv of all CADD entries for that chromosome.
 __Note: The program continually adds entries to this file, do NOT remove or replace this file till the program is done!__
 - Log_output: a file with timed messages on updates within the program. (Does not contain error messages or warnings).
+- progression_json: a json file containing set parameters, like batch_size, to keep track of progress during the programs execution.
 
 ## TODO:
 - Refactoring and optimization.
