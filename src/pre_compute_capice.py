@@ -6,7 +6,7 @@ import time
 import os
 from src.logger import Logger
 from src.utilities.utilities import Utilities
-from src.output_reinitializer import OutputReInitializer
+from src.progress_tracker import ProgressTracker
 
 
 class CalculateCapiceScores:
@@ -28,8 +28,11 @@ class CalculateCapiceScores:
         self.output_loc = output_loc
         self.utilities = Utilities()
         self.utilities.check_if_dir_exists(output_loc)
-        self.reinstance = OutputReInitializer(self.output_loc)
+        self.progress_track = ProgressTracker(self.output_loc)
         self.previous_iteration_df = None
+        self.features_of_interest = ['#Chr', 'Pos', 'Ref', 'Alt',
+                                     'GeneID', 'CCDS', 'FeatureID',
+                                     'prediction']
 
     def get_header(self):
         if not self.titles:
@@ -66,14 +69,7 @@ class CalculateCapiceScores:
             duplicate = variants_df[variants_df.duplicated()]
             self.log.log('Duplicate encountered in CADD dataset!: \nIndex:{},'
                          '\nEntry:{}'.format(duplicate.index, duplicate))
-        for unique_chr in variants_df['#Chr'].unique():
-            # //TODO: add a merge with previous dataframe and merge left only (
-            # so subset_variants_df is the left one), by using how='left'
-            # and indicator = True. Then select only those
-            # with _merge == 'left_only' and boom no duplicates.
-
-            # //TODO: add function to get a dataframe of the gzipped archive
-            # of that chromosome, last start - x entries.
+        for iteration, unique_chr in enumerate(variants_df['#Chr'].unique()):
             subset_variants_df = variants_df[variants_df['#Chr'] == unique_chr]
             output_dir = os.path.join(self.output_loc, 'chr{}'.format(
                 unique_chr))
@@ -83,21 +79,58 @@ class CalculateCapiceScores:
             final_destination = os.path.join(output_dir, output_filename)
             self.utilities.check_if_file_exists(final_destination,
                                                 capice_ouput=True)
-            features_of_interest = ['#Chr', 'Pos', 'Ref', 'Alt',
-                                    'GeneID', 'CCDS', 'FeatureID', 'prediction']
+            subset_variants_df = subset_variants_df[self.features_of_interest]
+            subset_variants_df = self._get_and_check_last_entries(
+                final_destination, subset_variants_df,
+                self.previous_iteration_df)
             with gzip.open(final_destination, 'at') as f:
-                subset_variants_df[features_of_interest].to_csv(f, sep="\t",
-                                                                index=False,
-                                                                header=None)
+                subset_variants_df.to_csv(f, sep="\t",
+                                          index=False,
+                                          header=None)
+            total_processed_rows = 0
+            if self.progress_track.is_in_progression_json(final_destination):
+                total_processed_rows = \
+                    self.progress_track.get_progression_json_value(
+                        final_destination)
+            total_processed_rows += subset_variants_df.shape[0]
+            self.progress_track.update_progression(final_destination,
+                                                   total_processed_rows)
+        self.previous_iteration_df = variants_df.tail(100)
 
     def load_model(self, model_loc):
         self.model = pickle.load(open(model_loc, "rb")).best_estimator_
         self.model_feats = self.model.get_booster().feature_names
 
+    @staticmethod
+    def _merge_and_remove_dupes(left, right):
+        merge = left.merge(right, how='left', indicator=True)
+        return merge[merge['_merge'] == 'left_only'].drop('_merge', axis=1)
+
+    def _get_and_check_last_entries(self, output_filename, subset_df,
+                                    previous_df=None):
+        if self.progress_track.is_in_progression_json(output_filename) and \
+                not previous_df:
+            lines_processed = self.progress_track.get_progression_json_value(
+                output_filename
+            )
+            get_nrows = 100
+            start = None
+            if lines_processed < 100:
+                get_nrows = lines_processed
+            else:
+                start = lines_processed - 99
+            previous_df = pd.read_csv(output_filename, compression='gzip',
+                                      sep='\t', names=self.features_of_interest,
+                                      nrows=get_nrows, skiprows=start)
+        if previous_df:
+            subset_df = self._merge_and_remove_dupes(subset_df, previous_df)
+        return subset_df
+
     def calc_capice(self):
-        start, batch_size = self.reinstance.get_start_and_batchsize()
+        start, batch_size = self.progress_track.get_start_and_batchsize()
         if not batch_size:
             batch_size = self.batch_size
+            self.progress_track.update_progression('batch_size', batch_size)
         self._calc_capice(start, batch_size)
 
     def _calc_capice(self, start, batch_size):
@@ -132,3 +165,4 @@ class CalculateCapiceScores:
                 start = 2
                 first_iter = False
             start += batch_size
+            self.progress_track.update_progression('start', start)

@@ -6,7 +6,7 @@ import gzip
 import os
 
 
-class OutputReInitializer:
+class ProgressTracker:
     """
     Class to check for existing files in terms of progress.
     """
@@ -72,6 +72,12 @@ class OutputReInitializer:
             self.progress_json = json.load(p_json)
             p_json.close()
 
+    def is_in_progression_json(self, key):
+        return_value = False
+        if key in self.progress_json.keys():
+            return_value = True
+        return return_value
+
     def get_start_and_batchsize(self):
         return self.start, self.batch_size
 
@@ -80,3 +86,18 @@ class OutputReInitializer:
 
     def get_progression_json_value(self, key):
         return self.progress_json[key]
+
+    def update_progression(self, key, value):
+        if key in self.progress_json.keys():
+            to_be_updated = self.progress_json[key]
+            if to_be_updated != value:
+                self.progress_json[key] = value
+                self.log.log('Updating progression on: {}, value: {}'.format(
+                    key, value
+                ))
+        else:
+            self.progress_json[key] = value
+            self.log.log('No progression found on {}, adding'
+                         ' to progression json.'.format(key))
+        with open(self.progress_json_loc, 'w') as json_file:
+            json.dump(self.progress_json, json_file)
