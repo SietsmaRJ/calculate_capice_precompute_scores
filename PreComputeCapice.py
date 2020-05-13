@@ -6,11 +6,11 @@ from utilities.impute_preprocess import impute, preprocess
 import gzip
 import time
 import os
-import argparse
-from datetime import datetime
-import psutil
 import json
 from pathlib import Path
+from logger import Logger
+from command_line_supporter import ArgumentSupporter
+from utilities.utilities import Utilities
 
 
 class CalculateCapiceScores:
@@ -18,9 +18,9 @@ class CalculateCapiceScores:
     Main class of the script to call all the various logger class functions and
     will process the iterative chunking processing of the CADD file.
     """
-    def __init__(self, logger_instance, filepath, model_loc, output_loc,
+    def __init__(self, filepath, model_loc, output_loc,
                  batch_size):
-        self.log = logger_instance
+        self.log = Logger()
         self.filepath = filepath
         self.titles = None
         self.get_header()
@@ -32,7 +32,7 @@ class CalculateCapiceScores:
         self.output_loc = output_loc
         self.utilities = Utilities()
         self.utilities.check_if_dir_exists(output_loc)
-        self.reinstance = OutputReInitializer(self.output_loc, logger_instance)
+        self.reinstance = OutputReInitializer(self.output_loc)
         self.previous_iteration_df = None
 
     def get_header(self):
@@ -142,9 +142,9 @@ class OutputReInitializer:
     """
     Class to check for existing files in terms of progress.
     """
-    def __init__(self, output_loc, logger_instance):
+    def __init__(self, output_loc):
         self.output = output_loc
-        self.log = logger_instance
+        self.log = Logger()
         self.utilities = Utilities()
         self.progress_json = None
         self.start = None
@@ -217,146 +217,6 @@ class OutputReInitializer:
         return self.progress_json[key]
 
 
-class ArgumentSupporter:
-    """
-    Class to handle the given command line input.
-    Type python3 PreComputeCapice.py --help for more details.
-    """
-
-    def __init__(self):
-        parser = self._create_argument_parser()
-        self.arguments = parser.parse_args()
-
-    @staticmethod
-    def _create_argument_parser():
-        parser = argparse.ArgumentParser(
-            prog="PreComputeCapice.py",
-            description="Python script to calculate Pre-computed"
-                        " scores for CAPICE for every given CADD variant.")
-        required = parser.add_argument_group("Required arguments")
-        optional = parser.add_argument_group("Optional arguments")
-
-        required.add_argument('-f',
-                              '--file',
-                              nargs=1,
-                              type=str,
-                              required=True,
-                              help='The location of the CADD'
-                                   ' annotated SNV file.')
-
-        required.add_argument('-m',
-                              '--model',
-                              nargs=1,
-                              type=str,
-                              required=True,
-                              help='The location of the CAPICE'
-                                   ' model pickled file.')
-
-        required.add_argument('-o',
-                              '--output',
-                              nargs=1,
-                              type=str,
-                              required=True,
-                              help='The output directory to put the processed'
-                                   'CADD variants in.')
-
-        optional.add_argument('-s',
-                              '--batchsize',
-                              nargs=1,
-                              type=int,
-                              default=10000,
-                              required=False,
-                              help='The chunksize for the script to'
-                                   ' read the gzipped archive.'
-                                   ' (Default: 10000)')
-        return parser
-
-    def get_argument(self, argument_key):
-        """
-        Method to get a command line argument.
-        :param argument_key: Command line argument.
-        :return: List or string.
-        """
-        if self.arguments is not None and argument_key in self.arguments:
-            value = getattr(self.arguments, argument_key)
-        else:
-            value = None
-
-        return value
-
-
-class Logger:
-    """
-    Class to make a logfile on the progress being made.
-    """
-    def __init__(self, output_dir):
-        self.output_dir = output_dir
-        self.logfile = None
-        self.utilities = Utilities()
-        self.check_if_dir_exist()
-        self.check_if_log_file_exist()
-
-    def check_if_dir_exist(self):
-        output_dir = os.path.join(self.output_dir, 'log_output')
-        self.utilities.check_if_dir_exists(output_dir)
-        self.output_dir = output_dir
-
-    def check_if_log_file_exist(self):
-        log_file_name = '{}_logfile.txt'.format(datetime.now().strftime(
-            "%Y_%m_%d_%H%M%S_%f"))
-        joined_path = os.path.join(self.output_dir, log_file_name)
-        self.utilities.check_if_file_exists(joined_path)
-        self.logfile = joined_path
-
-    def get_output_dir(self):
-        return self.output_dir
-
-    def log(self, message):
-        timestamp = datetime.now().strftime("%H:%M:%S_%f")
-        timed_message = '[{}]: {}\n'.format(timestamp, message)
-        with open(self.logfile, 'a') as logfile:
-            logfile.write(timed_message)
-
-
-class Utilities:
-    @staticmethod
-    def get_ram_usage():
-        process = psutil.Process(os.getpid())
-        memory_usage = process.memory_info().rss / 1000000  # Megabytes
-        return memory_usage
-
-    @staticmethod
-    def check_if_dir_exists(path):
-        if not os.path.exists(path):
-            os.makedirs(path)
-
-    @staticmethod
-    def check_if_file_exists(filepath, capice_ouput=False, return_value=False):
-        if return_value:
-            make_output = False
-        else:
-            make_output = True
-        if not os.path.isfile(filepath):
-            if return_value:
-                return False
-            if capice_ouput:
-                if make_output:
-                    with gzip.open(filepath, 'a+') as file:
-                        file.close()
-            else:
-                if make_output:
-                    with open(filepath, 'a+') as file:
-                        file.close()
-        elif return_value:
-            return True
-
-    @staticmethod
-    def export_start_batchsize(output_loc, start, batch_size):
-        output_json = {'start': start, 'batch_size': batch_size}
-        with open(output_loc, 'w') as json_file:
-            json.dump(output_json, json_file)
-
-
 def main():
     """
     Main method of the script. Will call the various classes.
@@ -374,13 +234,13 @@ def main():
         output_loc = str(output_loc[0])
     if isinstance(batch_size, list):
         batch_size = int(batch_size[0])
-    logger = Logger(output_loc)
+    logger = Logger()
+    logger.set_output_dir(output_loc)
     logger.log('CADD file location: {}'.format(cadd_loc))
     logger.log('Model file location: {}'.format(model_loc))
     logger.log('Output directory: {}'.format(output_loc))
     logger.log('Batch size set to: {}'.format(batch_size))
-    precompute_capice = CalculateCapiceScores(logger_instance=logger,
-                                              filepath=cadd_loc,
+    precompute_capice = CalculateCapiceScores(filepath=cadd_loc,
                                               model_loc=model_loc,
                                               output_loc=output_loc,
                                               batch_size=batch_size)
