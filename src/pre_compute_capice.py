@@ -110,6 +110,8 @@ class CalculateCapiceScores:
     def _get_and_check_last_entries(self, output_filename, subset_df):
         if self.previous_iteration_df is None:
             if self.progress_track.is_in_progression_json(output_filename):
+                self.log.log('No progression dataframe found, loading in'
+                             ' from file: {}.'.format(output_filename))
                 lines_processed = \
                     self.progress_track.get_progression_json_value(
                         output_filename
@@ -127,7 +129,11 @@ class CalculateCapiceScores:
                     names=self.features_of_interest,
                     nrows=get_nrows,
                     skiprows=start)
+            else:
+                self.log.log('No progression dataframe found'
+                             ' nor progression file. Skipping duplicate check.')
         if self.previous_iteration_df is not None:
+            self.log.log('Testing for duplicates.')
             subset_df = self._merge_and_remove_dupes(subset_df,
                                                      self.previous_iteration_df)
         return subset_df
