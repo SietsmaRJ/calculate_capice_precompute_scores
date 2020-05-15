@@ -57,7 +57,7 @@ class ProgressTracker:
                 if os.path.isfile(file):
                     for line in gzip.open(file):
                         processed_file_nlines[file] += 1
-            total_lines = 0
+            total_lines = -10
             for nline in processed_file_nlines.values():
                 total_lines += nline
             self.log.log('Amount of lines found: {}'.format(total_lines))
