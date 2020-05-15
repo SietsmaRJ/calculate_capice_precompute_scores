@@ -37,8 +37,9 @@ class ProgressTracker:
         else:
             self.log.log('No progression json found,'
                          ' checking for processed files.')
+            self.progress_json = {'start': None, 'batch_size': None}
             with open(progress_json, 'w+') as json_file:
-                json.dump({'start': None, 'batch_size': None}, json_file)
+                json.dump(self.progress_json, json_file)
 
     def _check_for_processed_files(self):
         need_to_process = []
