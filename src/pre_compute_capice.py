@@ -81,8 +81,7 @@ class CalculateCapiceScores:
                                                 capice_ouput=True)
             subset_variants_df = subset_variants_df[self.features_of_interest]
             subset_variants_df = self._get_and_check_last_entries(
-                final_destination, subset_variants_df,
-                self.previous_iteration_df)
+                final_destination, subset_variants_df)
             with gzip.open(final_destination, 'at') as f:
                 subset_variants_df.to_csv(f, sep="\t",
                                           index=False,
@@ -104,26 +103,33 @@ class CalculateCapiceScores:
     @staticmethod
     def _merge_and_remove_dupes(left, right):
         merge = left.merge(right, how='left', indicator=True)
-        return merge[merge['_merge'] == 'left_only'].drop('_merge', axis=1)
+        in_between_merge = merge[merge['_merge'] == 'left_only'].drop(
+            '_merge', axis=1)
+        return in_between_merge
 
-    def _get_and_check_last_entries(self, output_filename, subset_df,
-                                    previous_df=None):
-        if self.progress_track.is_in_progression_json(output_filename) and \
-                not previous_df:
-            lines_processed = self.progress_track.get_progression_json_value(
-                output_filename
-            )
-            get_nrows = 100
-            start = None
-            if lines_processed < 100:
-                get_nrows = lines_processed
-            else:
-                start = lines_processed - 99
-            previous_df = pd.read_csv(output_filename, compression='gzip',
-                                      sep='\t', names=self.features_of_interest,
-                                      nrows=get_nrows, skiprows=start)
-        if previous_df:
-            subset_df = self._merge_and_remove_dupes(subset_df, previous_df)
+    def _get_and_check_last_entries(self, output_filename, subset_df):
+        if self.previous_iteration_df is None:
+            if self.progress_track.is_in_progression_json(output_filename):
+                lines_processed = \
+                    self.progress_track.get_progression_json_value(
+                        output_filename
+                    )
+                get_nrows = 100
+                start = None
+                if lines_processed < 100:
+                    get_nrows = lines_processed
+                else:
+                    start = lines_processed - 99
+                self.previous_iteration_df = pd.read_csv(
+                    output_filename,
+                    compression='gzip',
+                    sep='\t',
+                    names=self.features_of_interest,
+                    nrows=get_nrows,
+                    skiprows=start)
+        if self.previous_iteration_df is not None:
+            subset_df = self._merge_and_remove_dupes(subset_df,
+                                                     self.previous_iteration_df)
         return subset_df
 
     def calc_capice(self):

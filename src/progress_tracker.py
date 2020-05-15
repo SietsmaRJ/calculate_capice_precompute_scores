@@ -28,17 +28,18 @@ class ProgressTracker:
         is_json = self.utilities.check_if_file_exists(progress_json,
                                                       return_value=True)
         if is_json:
-            with open(progress_json) as json_file:
+            with open(self.progress_json_loc) as json_file:
                 json_data = json.load(json_file)
             self.log.log('Progression json found! Continuing from {}'.format(
                 json_data['start']))
+            self.progress_json = json_data
             self.start = json_data['start']
             self.batch_size = json_data['batch_size']
         else:
             self.log.log('No progression json found,'
                          ' checking for processed files.')
             self.progress_json = {'start': None, 'batch_size': None}
-            with open(progress_json, 'w+') as json_file:
+            with open(self.progress_json_loc, 'w+') as json_file:
                 json.dump(self.progress_json, json_file)
 
     def _check_for_processed_files(self):
@@ -58,18 +59,18 @@ class ProgressTracker:
                     for line in gzip.open(file):
                         processed_file_nlines[file] += 1
             total_lines = -10
-            for nline in processed_file_nlines.values():
-                total_lines += nline
+            for key, nline in processed_file_nlines.items():
+                if os.path.isfile(key):
+                    total_lines += nline
             self.log.log('Amount of lines found: {}'.format(total_lines))
             self.start = total_lines
-            start_batchsize_json = {'start': self.start, 'batch_size': None}
-            start_batchsize_json.update(processed_file_nlines)
-            with open(self.progress_json, 'w') as progress_json:
-                json.dump(start_batchsize_json,
+            processed_file_nlines['start'] = self.start
+            with open(self.progress_json_loc, 'w') as progress_json:
+                json.dump(processed_file_nlines,
                           progress_json)
             self.log.log('Start has been saved in: {}'.format(
                 self.progress_json))
-        with open(self.progress_json) as p_json:
+        with open(self.progress_json_loc) as p_json:
             self.progress_json = json.load(p_json)
             p_json.close()
 
