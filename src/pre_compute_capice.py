@@ -100,11 +100,14 @@ class CalculateCapiceScores:
         self.model = pickle.load(open(model_loc, "rb")).best_estimator_
         self.model_feats = self.model.get_booster().feature_names
 
-    @staticmethod
-    def _merge_and_remove_dupes(left, right):
+    def _merge_and_remove_dupes(self, left, right):
+        nrows_before = left.shape[0]
         merge = left.merge(right, how='left', indicator=True)
         in_between_merge = merge[merge['_merge'] == 'left_only'].drop(
             '_merge', axis=1)
+        nrows_after = in_between_merge.shape[0]
+        self.log.log('Removed {} duplicated rows.'.format(
+            nrows_before - nrows_after))
         return in_between_merge
 
     def _get_and_check_last_entries(self, output_filename, subset_df):
@@ -116,6 +119,7 @@ class CalculateCapiceScores:
                     self.progress_track.get_progression_json_value(
                         output_filename
                     )
+                #//TODO: Fix bug in this part
                 get_nrows = 100
                 start = None
                 if lines_processed < 100:
@@ -129,9 +133,14 @@ class CalculateCapiceScores:
                     names=self.features_of_interest,
                     nrows=get_nrows,
                     skiprows=start)
+                self.log.log('Previous iteration dataframe should be loaded.')
             else:
-                self.log.log('No progression dataframe found'
-                             ' nor progression file. Skipping duplicate check.')
+                self.log.log(
+                    'No progression dataframe found nor progression file.'
+                    ' Skipping duplicate check for file: {}.'.format(
+                        output_filename
+                    )
+                )
         if self.previous_iteration_df is not None:
             self.log.log('Testing for duplicates.')
             subset_df = self._merge_and_remove_dupes(subset_df,
@@ -172,5 +181,8 @@ class CalculateCapiceScores:
                 reset_timer = time.time()
 
             self.calculate_save_capice_score(start, batch_size)
+            if not start:
+                start = 0
             start += batch_size
             self.progress_track.update_progression('start', start)
+            exit()
