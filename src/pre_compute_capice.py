@@ -110,8 +110,6 @@ class CalculateCapiceScores:
         merge = self.previous_iteration_df.append(subset_df,
                                                   ignore_index=True)
 
-        merge.to_csv('./merge.csv', index=False)
-
         merge.drop_duplicates(subset=self.features_of_interest[:-1],
                               inplace=True,
                               ignore_index=True)
