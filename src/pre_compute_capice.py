@@ -154,7 +154,10 @@ class CalculateCapiceScores:
 
     def calc_capice(self):
         start, batch_size = self.progress_track.get_start_and_batchsize()
-        if not batch_size:
+        if batch_size is None:
+            batch_size = self.batch_size
+            self.progress_track.update_progression('batch_size', batch_size)
+        elif batch_size != self.batch_size:
             batch_size = self.batch_size
             self.progress_track.update_progression('batch_size', batch_size)
         self._calc_capice(start, batch_size)
