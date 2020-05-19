@@ -162,7 +162,6 @@ class CalculateCapiceScores:
     def _calc_capice(self, start, batch_size):
         start_time = time.time()
         reset_timer = time.time()
-        iteration = 0
         while self.not_done:
             time_iwl = time.time()
             if time_iwl - reset_timer > (60 * 60):
@@ -191,6 +190,3 @@ class CalculateCapiceScores:
                 start = 0
             start += batch_size
             self.progress_track.update_progression('start', start)
-            iteration += 1
-            if iteration > 1:
-                exit()

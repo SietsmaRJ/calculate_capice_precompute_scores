@@ -68,8 +68,8 @@ class ProgressTracker:
             with open(self.progress_json_loc, 'w') as progress_json:
                 json.dump(processed_file_nlines,
                           progress_json)
-            self.log.log('Start has been saved in: {}'.format(
-                self.progress_json))
+            self.log.log('Start {} has been saved in:'
+                         ' {}'.format(self.start, self.progress_json_loc))
         with open(self.progress_json_loc) as p_json:
             self.progress_json = json.load(p_json)
             p_json.close()
