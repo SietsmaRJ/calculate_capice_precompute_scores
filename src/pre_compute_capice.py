@@ -191,5 +191,5 @@ class CalculateCapiceScores:
             self.calculate_save_capice_score(start, batch_size)
             if not start:
                 start = 0
-            start += batch_size
+            start += batch_size - 1
             self.progress_track.update_progression('start', start)
