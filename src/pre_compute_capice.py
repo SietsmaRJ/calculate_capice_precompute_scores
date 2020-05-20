@@ -72,7 +72,7 @@ class CalculateCapiceScores:
             duplicate = variants_df[variants_df.duplicated()]
             self.log.log('Duplicate encountered in CADD dataset!: \nIndex:{},'
                          '\nEntry:{}'.format(duplicate.index, duplicate))
-        for iteration, unique_chr in enumerate(variants_df['#Chr'].unique()):
+        for unique_chr in variants_df['#Chr'].unique():
             subset_variants_df = variants_df[variants_df['#Chr'] == unique_chr]
             output_dir = os.path.join(self.output_loc, 'chr{}'.format(
                 unique_chr))
@@ -122,33 +122,34 @@ class CalculateCapiceScores:
         return merge
 
     def _get_and_check_last_entries(self, output_filename, subset_df):
-        if self.progress_track.is_in_progression_json(output_filename):
-            self.log.log('No progression dataframe found, loading in'
-                         ' from file: {}.'.format(output_filename))
-            lines_processed = \
-                self.progress_track.get_progression_json_value(
-                    output_filename
-                )
-            if lines_processed < 100:
-                start = None
-                get_nrows = lines_processed
+        if self.previous_iteration_df.shape[0] == 0:
+            if self.progress_track.is_in_progression_json(output_filename):
+                self.log.log('No progression dataframe found, loading in'
+                             ' from file: {}.'.format(output_filename))
+                lines_processed = \
+                    self.progress_track.get_progression_json_value(
+                        output_filename
+                    )
+                if lines_processed < 100:
+                    start = None
+                    get_nrows = lines_processed
+                else:
+                    start = lines_processed - 99
+                    get_nrows = 100
+                self.previous_iteration_df = pd.read_csv(
+                    output_filename,
+                    compression='gzip',
+                    sep='\t',
+                    names=self.features_of_interest,
+                    nrows=get_nrows,
+                    skiprows=start)
             else:
-                start = lines_processed - 99
-                get_nrows = 100
-            self.previous_iteration_df = pd.read_csv(
-                output_filename,
-                compression='gzip',
-                sep='\t',
-                names=self.features_of_interest,
-                nrows=get_nrows,
-                skiprows=start)
-        else:
-            self.log.log(
-                'No progression dataframe found nor progression file.'
-                ' Skipping duplicate check for file: {}.'.format(
-                    output_filename
+                self.log.log(
+                    'No progression dataframe found nor progression file.'
+                    ' Skipping duplicate check for file: {}.'.format(
+                        output_filename
+                    )
                 )
-            )
         return_df = self._merge_and_remove_dupes(subset_df)
         return return_df
 
