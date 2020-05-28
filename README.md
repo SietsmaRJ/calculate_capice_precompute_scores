@@ -81,4 +81,5 @@ __Note: The program continually adds entries to this file, do NOT remove or repl
 - progression_json: a json file containing set parameters, like batch_size, to keep track of progress during the programs execution.
 
 ## TODO:
+- Make input file (-f / --file) also specific for the progression.json.
 - Refactoring and optimization.
