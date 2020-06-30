@@ -21,7 +21,7 @@ The program requires the following packages:
  * scikit-learn ([v0.19.1](https://scikit-learn.org/stable/whats_new.html); [BSD 3-Clause License](https://github.com/scikit-learn/scikit-learn/blob/master/COPYING))
  * xgboost ([v0.72.1](https://github.com/dmlc/xgboost); [Apache 2 License](https://github.com/dmlc/xgboost/blob/master/LICENSE))
  
-__Warning: this program works for python version 3.6, it does not work for python 3.7 or higher__
+__Warning: this program works for python version 3.6, it does not work for python 3.7 or higher because of numpy, scikit-learn and xgboost version dependency issues.__
 
 ## Installing
 
