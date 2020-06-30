@@ -99,7 +99,10 @@ class CalculateCapiceScores:
         self.previous_iteration_df = variants_df.tail(100)
 
     def load_model(self, model_loc):
-        self.model = pickle.load(open(model_loc, "rb")).best_estimator_
+        try:
+            self.model = pickle.load(open(model_loc, "rb")).best_estimator_
+        except AttributeError:
+            self.model = pickle.load(open(model_loc, "rb"))
         self.model_feats = self.model.get_booster().feature_names
 
     def _merge_and_remove_dupes(self, subset_df):
